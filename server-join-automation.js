@@ -142,8 +142,27 @@ class ServerJoinAutomation {
       // Normalize invite code (remove discord.gg/ prefix if present)
       const normalizedCode = inviteCode.replace(/discord\.gg\//i, '').trim();
       
-      // Fetch invite info using direct API
-      const inviteData = await this.client.api.get(`/invites/${normalizedCode}`);
+      // Retry logic for network errors
+      let inviteData;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          // Fetch invite info using direct API
+          inviteData = await this.client.api.get(`/invites/${normalizedCode}`);
+          break;
+        } catch (err) {
+          if (err.message?.includes('network') || err.message?.includes('ECONN')) {
+            console.log(`   ⚠️ Network error on attempt ${attempt}/3, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            throw err;
+          }
+        }
+      }
+      
+      if (!inviteData) {
+        throw new Error('Failed to fetch invite after retries');
+      }
+      
       const guildId = inviteData.guild?.id;
       const guildName = inviteData.guild?.name;
       
@@ -156,9 +175,26 @@ class ServerJoinAutomation {
         return { success: true, message: 'Already in server', guildId };
       }
 
-      // Join the server using direct API
+      // Join the server using direct API with retry
       console.log('   📨 Accepting invite...');
-      const result = await this.client.api.post(`/invites/${normalizedCode}`);
+      let result;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          result = await this.client.api.post(`/invites/${normalizedCode}`);
+          break;
+        } catch (err) {
+          if (err.message?.includes('network') || err.message?.includes('ECONN')) {
+            console.log(`   ⚠️ Network error on attempt ${attempt}/3, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            throw err;
+          }
+        }
+      }
+      
+      if (!result) {
+        throw new Error('Failed to join after retries');
+      }
       
       console.log('   ✅ Joined successfully!');
       
