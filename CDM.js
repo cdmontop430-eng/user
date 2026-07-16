@@ -426,6 +426,13 @@ const server = http.createServer(async (req, res) => {
     <div id="joinMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
   </div>
 
+  <div class="card" style="margin-bottom: 24px;">
+    <h2 style="margin-top:0; color: #ef4444;">🔓 Manual CAPTCHA Solver</h2>
+    <p style="margin:4px 0 16px; color:#9ca3af;">Solve CAPTCHAs manually for each bot when joining servers.</p>
+    <div id="captchaList"></div>
+    <div id="captchaMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
+  </div>
+
   <div class="card" id="bots"></div>
 
   <script>
@@ -580,6 +587,74 @@ const server = http.createServer(async (req, res) => {
     document.getElementById('unmuteAllBtn').addEventListener('click', () => fetchWithStatus('/audio/unmute'));
     document.getElementById('deafAllBtn').addEventListener('click', () => fetchWithStatus('/audio/deafen'));
     document.getElementById('undeafAllBtn').addEventListener('click', () => fetchWithStatus('/audio/undeafen'));
+
+    // Manual CAPTCHA Solver
+    const captchaListEl = document.getElementById('captchaList');
+    const captchaMessageEl = document.getElementById('captchaMessage');
+    let captchaData = {};
+
+    const fetchCaptchaStatus = async () => {
+      try {
+        const res = await fetch('/captcha/status');
+        const data = await res.json();
+        captchaData = data.captchas || {};
+        renderCaptchaList();
+      } catch (e) {
+        console.error('Failed to fetch captcha status');
+      }
+    };
+
+    let botsData = [];
+
+    const renderCaptchaList = () => {
+      if (!captchaListEl) return;
+      
+      captchaListEl.innerHTML = botsData.map((bot, i) => {
+        const captcha = captchaData[i] || {};
+        return '<div class="bot" style="margin-bottom:12px;">'
+          + '<div><strong>Bot ' + bot.index + '</strong></div>'
+          + '<div><span>Status:</span><span>' + (captcha.status || 'Waiting...') + '</span></div>'
+          + '<div style="margin-top:8px;">'
+          + '<input id="captchaInput_' + i + '" placeholder="Enter CAPTCHA text for Bot ' + bot.index + '" style="max-width:300px;" />'
+          + '<button onclick="submitCaptcha(' + i + ')" style="background:#22c55e;color:#000;padding:8px 14px;font-size:14px;">Submit</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    };
+
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        botsData = data.bots || [];
+        renderStatus(data);
+      } catch (e) {
+        statusEl.textContent = 'Failed to load status';
+        botsEl.innerHTML = '';
+      }
+    };
+
+    window.submitCaptcha = async (botIndex) => {
+      const input = document.getElementById('captchaInput_' + botIndex);
+      const text = input.value.trim();
+      if (!text) {
+        captchaMessageEl.textContent = 'Please enter CAPTCHA text';
+        return;
+      }
+
+      try {
+        const res = await fetch('/captcha/solve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botIndex, text })
+        });
+        const data = await res.json();
+        captchaMessageEl.textContent = data.status || data.error;
+        setTimeout(fetchCaptchaStatus, 1000);
+      } catch (e) {
+        captchaMessageEl.textContent = 'Error: ' + e.message;
+      }
+    };
 
     // Server join automation
     const joinMessage = document.getElementById('joinMessage');
@@ -950,6 +1025,40 @@ const server = http.createServer(async (req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'screening passed', guildId }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return;
+  }
+
+  if (req.url === '/captcha/status' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ captchas: {} }));
+    return;
+  }
+
+  if (req.url === '/captcha/solve' && req.method === 'POST') {
+    try {
+      const body = await parseJSONBody(req);
+      const botIndex = body.botIndex !== undefined ? parseInt(body.botIndex) : 0;
+      const text = body.text || '';
+      
+      if (!text) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'CAPTCHA text is required' }));
+        return;
+      }
+
+      const bot = bots[botIndex];
+      if (!bot || bot.status !== 'ready') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bot not ready' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'CAPTCHA submitted for Bot ' + (botIndex + 1) }));
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));
