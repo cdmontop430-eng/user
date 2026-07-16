@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const ffmpeg = require('ffmpeg-static');
 const http = require('http');
 const fs = require('fs');
+const { ServerJoinAutomation } = require('./server-join-automation.js');
 
 function parseList(value) {
   return (value || '')
@@ -407,6 +408,24 @@ const server = http.createServer(async (req, res) => {
     <div id="audioMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
   </div>
 
+  <div class="card" style="margin-bottom: 24px;">
+    <h2 style="margin-top:0; color: #f59e0b;">🚪 Server Join Automation</h2>
+    <p style="margin:4px 0 16px; color:#9ca3af;">Automatically join servers, solve CAPTCHAs, and pass membership screening.</p>
+    <div class="form-row">
+      <input id="inviteUrl" placeholder="Server Invite URL (discord.gg/...)" />
+      <input id="guildIdForScreening" placeholder="Guild ID (for screening)" />
+    </div>
+    <div class="form-row" style="grid-template-columns: 1fr 1fr;">
+      <input id="captchaApiKey" placeholder="2captcha API Key (optional)" />
+      <input id="captchaService" placeholder="2captcha or anticaptcha" value="2captcha" />
+    </div>
+    <div class="actions">
+      <button id="autoJoinBtn" style="background:#f59e0b;color:#000;">Auto Join Server</button>
+      <button id="autoScreeningBtn" style="background:#8b5cf6;color:#fff;">Auto Pass Screening</button>
+    </div>
+    <div id="joinMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
+  </div>
+
   <div class="card" id="bots"></div>
 
   <script>
@@ -561,6 +580,72 @@ const server = http.createServer(async (req, res) => {
     document.getElementById('unmuteAllBtn').addEventListener('click', () => fetchWithStatus('/audio/unmute'));
     document.getElementById('deafAllBtn').addEventListener('click', () => fetchWithStatus('/audio/deafen'));
     document.getElementById('undeafAllBtn').addEventListener('click', () => fetchWithStatus('/audio/undeafen'));
+
+    // Server join automation
+    const joinMessage = document.getElementById('joinMessage');
+    const inviteUrlInput = document.getElementById('inviteUrl');
+    const guildIdForScreeningInput = document.getElementById('guildIdForScreening');
+    const captchaApiKeyInput = document.getElementById('captchaApiKey');
+    const captchaServiceInput = document.getElementById('captchaService');
+
+    document.getElementById('autoJoinBtn').addEventListener('click', async () => {
+      const inviteUrl = inviteUrlInput.value.trim();
+      if (!inviteUrl) {
+        joinMessage.textContent = 'Please enter an invite URL';
+        return;
+      }
+      
+      joinMessage.textContent = 'Joining server with all bots...';
+      
+      try {
+        const res = await fetch('/join/server', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inviteUrl,
+            useAllBots: true,
+            captchaApiKey: captchaApiKeyInput.value.trim() || undefined,
+            captchaService: captchaServiceInput.value.trim() || '2captcha'
+          })
+        });
+        
+        const data = await res.json();
+        if (data.successCount !== undefined) {
+          joinMessage.textContent = `Joined: ${data.successCount}/${data.totalCount} bots successful`;
+        } else {
+          joinMessage.textContent = data.status || data.error || 'Request sent';
+        }
+      } catch (e) {
+        joinMessage.textContent = 'Error: ' + e.message;
+      }
+      
+      setTimeout(fetchStatus, 2000);
+    });
+
+    document.getElementById('autoScreeningBtn').addEventListener('click', async () => {
+      const guildId = guildIdForScreeningInput.value.trim();
+      if (!guildId) {
+        joinMessage.textContent = 'Please enter a Guild ID for screening';
+        return;
+      }
+      
+      joinMessage.textContent = 'Passing membership screening...';
+      
+      try {
+        const res = await fetch('/join/screening', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guildId })
+        });
+        
+        const data = await res.json();
+        joinMessage.textContent = data.status || data.error || 'Screening request sent';
+      } catch (e) {
+        joinMessage.textContent = 'Error: ' + e.message;
+      }
+      
+      setTimeout(fetchStatus, 2000);
+    });
 
     fetchStatus();
     setInterval(fetchStatus, 10000);
@@ -763,6 +848,112 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'left' }));
+    return;
+  }
+
+  if (req.url === '/join/server' && req.method === 'POST') {
+    try {
+      const body = await parseJSONBody(req);
+      const inviteUrl = body.inviteUrl || body.invite || null;
+      const useAllBots = body.useAllBots !== false;
+      
+      if (!inviteUrl) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'inviteUrl is required' }));
+        return;
+      }
+
+      const targetBots = useAllBots ? bots.slice(0, 5) : bots.slice(0, 1);
+      const results = [];
+
+      for (let i = 0; i < targetBots.length; i++) {
+        const bot = targetBots[i];
+        if (bot.status !== 'ready') {
+          results.push({
+            bot: i + 1,
+            success: false,
+            error: 'Bot is offline',
+          });
+          continue;
+        }
+
+        try {
+          const automation = new ServerJoinAutomation(bot.token);
+          await automation.connect();
+          
+          const result = await automation.joinServerAdvanced(inviteUrl);
+          results.push({
+            bot: i + 1,
+            ...result,
+          });
+
+          automation.disconnect();
+        } catch (error) {
+          results.push({
+            bot: i + 1,
+            success: false,
+            error: error.message,
+          });
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'join attempted',
+        inviteUrl,
+        results,
+        successCount: results.filter(r => r.success).length,
+        totalCount: results.length
+      }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return;
+  }
+
+  if (req.url === '/join/screening' && req.method === 'POST') {
+    try {
+      const body = await parseJSONBody(req);
+      const guildId = body.guildId || body.guild || null;
+      const botIndex = body.botIndex ? parseInt(body.botIndex) - 1 : 0;
+      
+      if (!guildId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'guildId is required' }));
+        return;
+      }
+
+      const bot = bots[botIndex];
+      if (!bot || bot.status !== 'ready') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bot not ready' }));
+        return;
+      }
+
+      const guild = bot.client.guilds.cache.get(guildId);
+      if (!guild) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Guild not found' }));
+        return;
+      }
+
+      const result = await bot.client.api.guilds(guildId, 'members', bot.client.user.id, 'pending')
+        .patch({
+          data: {
+            form_fields: [],
+            passed: true
+          }
+        });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'screening passed', guildId }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
     return;
   }
 
