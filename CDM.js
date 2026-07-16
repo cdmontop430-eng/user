@@ -611,7 +611,7 @@ const server = http.createServer(async (req, res) => {
         
         const data = await res.json();
         if (data.successCount !== undefined) {
-          joinMessage.textContent = `Joined: ${data.successCount}/${data.totalCount} bots successful`;
+          joinMessage.textContent = 'Joined: ' + data.successCount + '/' + data.totalCount + ' bots successful';
         } else {
           joinMessage.textContent = data.status || data.error || 'Request sent';
         }
