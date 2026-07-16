@@ -657,8 +657,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      manualMessage.textContent = 'Joining server...';
-      manualCaptchaSection.style.display = 'none';
+      manualMessage.textContent = 'Joining server with all bots...';
+      manualCaptchaSection.style.display = 'block';
 
       try {
         const res = await fetch('/join/server', {
@@ -672,22 +672,16 @@ const server = http.createServer(async (req, res) => {
 
         const data = await res.json();
         
+        // Show results immediately
+        showManualCaptchaInputs(data.results || []);
+        
         if (data.successCount > 0) {
-          manualMessage.textContent = 'Joined! Check CAPTCHA section below if needed.';
+          manualMessage.textContent = 'Joined: ' + data.successCount + '/' + data.totalCount + ' bots successful';
         } else {
-          manualMessage.textContent = data.error || 'Join failed';
+          manualMessage.textContent = data.error || 'Join failed - see details below';
         }
         
-        // Show CAPTCHA inputs for bots that need it
-        setTimeout(() => {
-          if (data.results) {
-            const needsCaptcha = data.results.filter(r => !r.success);
-            if (needsCaptcha.length > 0) {
-              showManualCaptchaInputs(data.results);
-            }
-          }
-          setTimeout(fetchStatus, 2000);
-        }, 1000);
+        setTimeout(fetchStatus, 2000);
       } catch (e) {
         manualMessage.textContent = 'Error: ' + e.message;
       }
