@@ -23,6 +23,7 @@
   "type": "commonjs",
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
+    "axios": "^1.6.7",
     "clsx": "^2.1.1",
     "discord.js-selfbot-v13": "^3.7.1",
     "electron-store": "^8.1.0",
@@ -31,9 +32,12 @@
     "libsodium-wrappers": "^0.8.4",
     "lucide-react": "^1.14.0",
     "opusscript": "^0.0.8",
+    "puppeteer": "^22.0.0",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "tesseract.js": "^5.0.4"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",

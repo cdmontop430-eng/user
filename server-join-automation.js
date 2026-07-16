@@ -142,30 +142,33 @@ class ServerJoinAutomation {
       // Normalize invite code (remove discord.gg/ prefix if present)
       const normalizedCode = inviteCode.replace(/discord\.gg\//i, '').trim();
       
-      // Fetch invite info first
-      const invite = await this.client.invites.fetch(normalizedCode);
-      console.log(`   Server: ${invite.guild?.name || invite.guildId}`);
+      // Fetch invite info using direct API
+      const inviteData = await this.client.api.get(`/invites/${normalizedCode}`);
+      const guildId = inviteData.guild?.id;
+      const guildName = inviteData.guild?.name;
+      
+      console.log(`   Server: ${guildName || guildId}`);
       
       // Check if already in guild
-      const guild = this.client.guilds.cache.get(invite.guildId);
-      if (guild) {
+      const existingGuild = this.client.guilds.cache.get(guildId);
+      if (existingGuild) {
         console.log('   ℹ️ Already in this server');
-        return { success: true, message: 'Already in server' };
+        return { success: true, message: 'Already in server', guildId };
       }
 
-      // Join the server
+      // Join the server using direct API
       console.log('   📨 Accepting invite...');
-      const result = await this.client.invites.accept(invite.code);
+      const result = await this.client.api.post(`/invites/${normalizedCode}`);
       
       console.log('   ✅ Joined successfully!');
       
-      // Wait for membership screening
+      // Wait for server to appear in cache
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       // Check for membership screening
-      await this.handleMembershipScreening(invite.guildId);
+      await this.handleMembershipScreening(guildId);
       
-      return { success: true, message: 'Joined and completed screening' };
+      return { success: true, message: 'Joined and completed screening', guildId };
 
     } catch (error) {
       console.error('   ❌ Join failed:', error.message);
