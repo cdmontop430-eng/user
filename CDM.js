@@ -427,10 +427,19 @@ const server = http.createServer(async (req, res) => {
   </div>
 
   <div class="card" style="margin-bottom: 24px;">
-    <h2 style="margin-top:0; color: #ef4444;">🔓 Manual CAPTCHA Solver</h2>
-    <p style="margin:4px 0 16px; color:#9ca3af;">Solve CAPTCHAs manually for each bot when joining servers.</p>
-    <div id="captchaList"></div>
-    <div id="captchaMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
+    <h2 style="margin-top:0; color: #ef4444;">🔓 Manual CAPTCHA Solve</h2>
+    <p style="margin:4px 0 16px; color:#9ca3af;">Join server and solve CAPTCHAs manually for each bot.</p>
+    <div class="form-row">
+      <input id="manualInviteUrl" placeholder="Server Invite URL (discord.gg/...)" />
+    </div>
+    <div class="actions">
+      <button id="manualJoinBtn" style="background:#ef4444;color:#fff;">Join with Manual CAPTCHA</button>
+    </div>
+    <div id="manualCaptchaSection" style="margin-top:16px; display:none;">
+      <h3 style="margin-top:0; color:#fbbf24;">CAPTCHA Input</h3>
+      <div id="manualCaptchaList"></div>
+    </div>
+    <div id="manualMessage" style="margin:18px 0 0;color:#cbd5e1;"></div>
   </div>
 
   <div class="card" id="bots"></div>
@@ -631,6 +640,97 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         statusEl.textContent = 'Failed to load status';
         botsEl.innerHTML = '';
+      }
+    };
+
+    // Manual Join with CAPTCHA
+    const manualInviteUrlInput = document.getElementById('manualInviteUrl');
+    const manualJoinBtn = document.getElementById('manualJoinBtn');
+    const manualCaptchaSection = document.getElementById('manualCaptchaSection');
+    const manualCaptchaList = document.getElementById('manualCaptchaList');
+    const manualMessage = document.getElementById('manualMessage');
+
+    manualJoinBtn.addEventListener('click', async () => {
+      const inviteUrl = manualInviteUrlInput.value.trim();
+      if (!inviteUrl) {
+        manualMessage.textContent = 'Please enter an invite URL';
+        return;
+      }
+
+      manualMessage.textContent = 'Joining server...';
+      manualCaptchaSection.style.display = 'none';
+
+      try {
+        const res = await fetch('/join/server', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inviteUrl,
+            useAllBots: true
+          })
+        });
+
+        const data = await res.json();
+        
+        if (data.successCount > 0) {
+          manualMessage.textContent = 'Joined! Check CAPTCHA section below if needed.';
+        } else {
+          manualMessage.textContent = data.error || 'Join failed';
+        }
+        
+        // Show CAPTCHA inputs for bots that need it
+        setTimeout(() => {
+          if (data.results) {
+            const needsCaptcha = data.results.filter(r => !r.success);
+            if (needsCaptcha.length > 0) {
+              showManualCaptchaInputs(data.results);
+            }
+          }
+          setTimeout(fetchStatus, 2000);
+        }, 1000);
+      } catch (e) {
+        manualMessage.textContent = 'Error: ' + e.message;
+      }
+    });
+
+    const showManualCaptchaInputs = (results) => {
+      manualCaptchaSection.style.display = 'block';
+      manualCaptchaList.innerHTML = results.map((result, i) => {
+        if (result.success) {
+          return '<div class="bot" style="margin-bottom:12px;"><strong>Bot ' + result.bot + '</strong> - <span style="color:#22c55e;">Joined successfully</span></div>';
+        }
+        return '<div class="bot" style="margin-bottom:12px;">'
+          + '<div><strong>Bot ' + result.bot + '</strong></div>'
+          + '<div style="color:#fbbf24; margin-bottom:8px;">' + (result.error || 'Needs CAPTCHA') + '</div>'
+          + '<input id="manualCaptcha_' + result.bot + '" placeholder="Enter CAPTCHA text for Bot ' + result.bot + '" style="max-width:300px;" />'
+          + '<button onclick="submitManualCaptcha(' + result.bot + ')" style="background:#22c55e;color:#000;padding:8px 14px;font-size:14px;margin-left:8px;">Submit</button>'
+          + '<div id="manualCaptchaStatus_' + result.bot + '" style="margin-top:8px;color:#cbd5e1;"></div>'
+          + '</div>';
+      }).join('');
+    };
+
+    window.submitManualCaptcha = async (botNum) => {
+      const input = document.getElementById('manualCaptcha_' + botNum);
+      const statusEl = document.getElementById('manualCaptchaStatus_' + botNum);
+      const text = input.value.trim();
+      
+      if (!text) {
+        if (statusEl) statusEl.textContent = 'Please enter CAPTCHA text';
+        return;
+      }
+
+      if (statusEl) statusEl.textContent = 'Submitting...';
+
+      try {
+        const res = await fetch('/captcha/solve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botIndex: botNum - 1, text })
+        });
+        const data = await res.json();
+        if (statusEl) statusEl.textContent = data.status || data.error;
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'Error: ' + e.message;
       }
     };
 
