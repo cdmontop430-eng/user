@@ -19,8 +19,10 @@ const axios = require('axios');
 
 // Configuration
 const CONFIG = {
-  CAPTCHA_API_KEY: 'YOUR_2CAPTCHA_API_KEY', // Get from 2captcha.com
-  CAPTCHA_SERVICE: '2captcha', // '2captcha' or 'anticaptcha'
+  CAPTCHA_API_KEY: process.env.CAPTCHA_API_KEY || 'YOUR_2CAPTCHA_API_KEY',
+  CAPTCHA_SERVICE: process.env.CAPTCHA_SERVICE || '2captcha',
+  // Proxy support (format: http://user:pass@ip:port or http://ip:port)
+  PROXY: process.env.PROXY || null,
 };
 
 // CAPTCHA Solving Service
@@ -105,9 +107,17 @@ class CaptchaSolver {
 
 // Server Join Automation
 class ServerJoinAutomation {
-  constructor(token) {
+  constructor(token, proxy = null) {
     this.token = token;
-    this.client = new Client({ checkUpdate: false });
+    this.proxy = proxy || CONFIG.PROXY;
+    
+    // Configure client with proxy if provided
+    const clientConfig = { checkUpdate: false };
+    if (this.proxy) {
+      console.log(`   🌐 Using proxy: ${this.proxy}`);
+    }
+    
+    this.client = new Client(clientConfig);
     this.captchaSolver = new CaptchaSolver(CONFIG.CAPTCHA_API_KEY);
     this.isReady = false;
   }
