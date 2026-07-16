@@ -672,18 +672,24 @@ const server = http.createServer(async (req, res) => {
 
         const data = await res.json();
         
-        // Show results immediately
+        // Always show results section
+        manualCaptchaSection.style.display = 'block';
         showManualCaptchaInputs(data.results || []);
         
         if (data.successCount > 0) {
           manualMessage.textContent = 'Joined: ' + data.successCount + '/' + data.totalCount + ' bots successful';
+        } else if (data.results) {
+          manualMessage.textContent = 'Join failed for all bots - see details below';
         } else {
-          manualMessage.textContent = data.error || 'Join failed - see details below';
+          manualMessage.textContent = data.error || 'Join failed';
         }
         
         setTimeout(fetchStatus, 2000);
       } catch (e) {
         manualMessage.textContent = 'Error: ' + e.message;
+        // Show error in captcha section
+        manualCaptchaSection.style.display = 'block';
+        manualCaptchaList.innerHTML = '<div style="color:#ef4444;margin-top:12px;">Error: ' + e.message + '</div>';
       }
     });
 
