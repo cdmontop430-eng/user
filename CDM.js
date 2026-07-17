@@ -116,7 +116,7 @@ function playGlobalAudio() {
 // Start with silence
 playGlobalSilence();
 
-const bots = tokens.slice(0, 5).map((token, index) => {
+const bots = tokens.slice(0, 14).map((token, index) => {
   const client = new Client({ checkUpdate: false });
   let voiceConnection = null;
   let readyPromise = null;
