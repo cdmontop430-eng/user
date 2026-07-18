@@ -466,7 +466,7 @@ const server = http.createServer(async (req, res) => {
       const data = await res.json();
       const joinedCount = data.results ? data.results.filter((item) => item.connected).length : 0;
       if (data.joinedAll) {
-        statusEl.textContent = `Joined ${joinedCount}/${data.results.length} bot(s) to the voice channel.`;
+        statusEl.textContent = 'Joined ' + joinedCount + '/' + data.results.length + ' bot(s) to the voice channel.';
       } else if (data.status) {
         statusEl.textContent = data.status;
       } else {
