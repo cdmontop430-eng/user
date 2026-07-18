@@ -464,14 +464,7 @@ const server = http.createServer(async (req, res) => {
         body: JSON.stringify({ channelId, guildId })
       });
       const data = await res.json();
-      const joinedCount = data.results ? data.results.filter((item) => item.connected).length : 0;
-      if (data.joinedAll) {
-        statusEl.textContent = 'Joined ' + joinedCount + '/' + data.results.length + ' bot(s) to the voice channel.';
-      } else if (data.status) {
-        statusEl.textContent = data.status;
-      } else {
-        statusEl.textContent = 'Join requested';
-      }
+      statusEl.textContent = data.status || 'Join requested';
       fetchStatus();
     });
 
@@ -703,15 +696,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === '/stay' && req.method === 'POST') {
-    await Promise.all(bots.map(async (bot, index) => {
-      if (!bot.channelId || !bot.guildId) return null;
-      try {
-        await bot.joinChannel(bot.channelId, bot.guildId);
-      } catch (error) {
-        console.error(`❌ [Stay] Bot ${index + 1} join failed:`, error?.message || error);
+    for (const bot of bots) {
+      if (bot.channelId && bot.guildId) {
+        bot.joinChannel(bot.channelId, bot.guildId);
       }
-      return null;
-    }));
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'staying in vc' }));
     return;
@@ -728,9 +717,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const results = await Promise.all(bots.map(async (bot, i) => {
+      const results = [];
+      for (let i = 0; i < bots.length; i++) {
+        const bot = bots[i];
         if (bot.status !== 'ready') {
-          return {
+          results.push({
             bot: i + 1,
             ready: false,
             connected: false,
@@ -739,37 +730,25 @@ const server = http.createServer(async (req, res) => {
             guildId: bot.guildId,
             lastError: 'Bot is offline',
             success: false,
-          };
+          });
+          continue;
         }
-        try {
-          const success = await bot.joinChannel(targetChannelId, targetGuildId);
-          return {
-            bot: i + 1,
-            ready: bot.status === 'ready',
-            connected: bot.voiceState === 'connected',
-            voiceState: bot.voiceState,
-            channelId: bot.channelId,
-            guildId: bot.guildId,
-            lastError: bot.lastError,
-            success,
-          };
-        } catch (error) {
-          return {
-            bot: i + 1,
-            ready: bot.status === 'ready',
-            connected: false,
-            voiceState: bot.voiceState,
-            channelId: bot.channelId,
-            guildId: bot.guildId,
-            lastError: error?.message || String(error),
-            success: false,
-          };
-        }
-      }));
+        const success = await bot.joinChannel(targetChannelId, targetGuildId);
+        results.push({
+          bot: i + 1,
+          ready: bot.status === 'ready',
+          connected: bot.voiceState === 'connected',
+          voiceState: bot.voiceState,
+          channelId: bot.channelId,
+          guildId: bot.guildId,
+          lastError: bot.lastError,
+          success,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
 
-      const joinedAll = results.every((item) => item.connected);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: joinedAll ? 'joined' : 'joining', channelId: targetChannelId, guildId: targetGuildId, joinedAll, results }));
+      res.end(JSON.stringify({ status: 'joining', channelId: targetChannelId, guildId: targetGuildId, joinedAll: results.every((item) => item.connected), results }));
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));
