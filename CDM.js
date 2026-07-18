@@ -464,7 +464,14 @@ const server = http.createServer(async (req, res) => {
         body: JSON.stringify({ channelId, guildId })
       });
       const data = await res.json();
-      statusEl.textContent = data.status || 'Join requested';
+      const joinedCount = data.results ? data.results.filter((item) => item.connected).length : 0;
+      if (data.joinedAll) {
+        statusEl.textContent = `Joined ${joinedCount}/${data.results.length} bot(s) to the voice channel.`;
+      } else if (data.status) {
+        statusEl.textContent = data.status;
+      } else {
+        statusEl.textContent = 'Join requested';
+      }
       fetchStatus();
     });
 
@@ -747,8 +754,9 @@ const server = http.createServer(async (req, res) => {
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
 
+      const joinedAll = results.every((item) => item.connected);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'joining', channelId: targetChannelId, guildId: targetGuildId, joinedAll: results.every((item) => item.connected), results }));
+      res.end(JSON.stringify({ status: joinedAll ? 'joined' : 'joining', channelId: targetChannelId, guildId: targetGuildId, joinedAll, results }));
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));
